@@ -266,6 +266,17 @@
     width:100%;
     accent-color: var(--copper);
   }
+  .dj-toggle{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--cream-dim);
+    width:100%;
+    cursor:pointer;
+  }
+  .dj-toggle input{ accent-color: var(--copper); }
 
   .controls{
     position:relative; z-index:1;
@@ -490,6 +501,14 @@
   <div class="listen-zone">
     <button class="auto-btn" id="autoBtn" type="button">🔁 オートで探して流す(5秒判定)</button>
     <p class="listen-hint" id="autoHint">5秒間だけ音を聞いてテンポを判定し、近い曲を自動で流し続けます。止めるまでループします。</p>
+    <label class="dj-toggle"><input type="checkbox" id="djModeToggle" checked>DJ風に曲を短く繋いで流す</label>
+    <div class="sensitivity-row">
+      <div class="sensitivity-label">
+        <span>1曲あたりの再生時間</span>
+        <span id="segmentValueLabel">30秒</span>
+      </div>
+      <input type="range" id="segmentSlider" min="15" max="90" step="5" value="30">
+    </div>
   </div>
 
   <div class="auto-playlist-panel" id="autoPlaylistPanel" style="display:none;">
@@ -584,6 +603,9 @@
   const sensitivitySlider = document.getElementById('sensitivitySlider');
   const autoBtnEl = document.getElementById('autoBtn');
   const autoHintEl = document.getElementById('autoHint');
+  const djModeToggle = document.getElementById('djModeToggle');
+  const segmentSlider = document.getElementById('segmentSlider');
+  const segmentValueLabel = document.getElementById('segmentValueLabel');
   const spotifyStatusEl = document.getElementById('spotifyStatus');
   const spotifyAuthBtn = document.getElementById('spotifyAuthBtn');
   const nowPlayingBarEl = document.getElementById('nowPlayingBar');
@@ -605,6 +627,15 @@
   let autoModeActive = false;   // 自動生成した曲リストがループ再生中かどうか
   let autoDetecting = false;    // 5秒間のリズム判定中かどうか
   let autoQueueUris = [];
+
+  // ---- DJモード（曲を短く区切ってフェードで繋ぐ）の状態 ----
+  let djModeEnabled = true;
+  let segmentSeconds = 30;
+  let lastAutoTrackUri = null;
+  let segmentTimer = null;
+  let fadeIntervalHandle = null;
+  const FADE_MS = 1500;
+  const DEFAULT_VOLUME = 0.8;
 
   function getTempoTerm(bpm){
     if (bpm < 60) return 'Largo';
@@ -766,6 +797,15 @@
           const artists = track.artists.map(a => a.name).join(', ');
           nowPlayingText = track.name + ' - ' + artists;
           updateAutoPlaylistHighlight(track.uri);
+
+          if (autoModeActive && track.uri !== lastAutoTrackUri){
+            const isFirstTrack = (lastAutoTrackUri === null);
+            lastAutoTrackUri = track.uri;
+            if (djModeEnabled){
+              if (!isFirstTrack) fadeIn();
+              scheduleSegmentAdvance();
+            }
+          }
         }
         const queueEmpty = !state.track_window || !state.track_window.next_tracks || state.track_window.next_tracks.length === 0;
         if (autoModeActive && state.paused && queueEmpty){
@@ -781,12 +821,15 @@
   async function stopPlayback(){
     autoModeActive = false;
     autoQueueUris = [];
+    lastAutoTrackUri = null;
+    clearSegmentTimers();
     renderAutoPlaylistPanel([]);
     if (autoBtnEl){
       autoBtnEl.textContent = '🔁 オートで探して流す(5秒判定)';
       autoBtnEl.disabled = false;
     }
     if (!player) return;
+    try{ await player.setVolume(DEFAULT_VOLUME); } catch(e){ /* ignore */ }
     try{ await player.pause(); } catch(e){ console.error(e); }
   }
 
@@ -1266,6 +1309,10 @@
       try{ player.activateElement(); } catch(e){ /* ignore */ }
     }
 
+    lastAutoTrackUri = null;
+    clearSegmentTimers();
+    if (player){ try{ await player.setVolume(DEFAULT_VOLUME); } catch(e){} }
+
     autoQueueUris = uris;
     autoModeActive = true;
     try{
@@ -1277,6 +1324,65 @@
 
     autoBtnEl.textContent = autoModeActive ? AUTO_STOP_LABEL : AUTO_DEFAULT_LABEL;
     autoBtnEl.disabled = false;
+  }
+
+  // ---------- DJモード: 曲を短く区切ってフェードで繋ぐ ----------
+  djModeToggle.addEventListener('change', () => {
+    djModeEnabled = djModeToggle.checked;
+    if (!djModeEnabled){
+      clearSegmentTimers();
+      if (player) player.setVolume(DEFAULT_VOLUME).catch(() => {});
+    } else if (autoModeActive){
+      scheduleSegmentAdvance();
+    }
+  });
+
+  segmentSlider.addEventListener('input', () => {
+    segmentSeconds = Number(segmentSlider.value);
+    segmentValueLabel.textContent = segmentSeconds + '秒';
+    if (autoModeActive && djModeEnabled) scheduleSegmentAdvance();
+  });
+
+  function clearSegmentTimers(){
+    if (segmentTimer){ clearTimeout(segmentTimer); segmentTimer = null; }
+    if (fadeIntervalHandle){ clearInterval(fadeIntervalHandle); fadeIntervalHandle = null; }
+  }
+
+  function scheduleSegmentAdvance(){
+    clearSegmentTimers();
+    if (!autoModeActive || !djModeEnabled) return;
+    const playMs = Math.max(4000, segmentSeconds * 1000 - FADE_MS);
+    segmentTimer = setTimeout(fadeOutThenNext, playMs);
+  }
+
+  function fadeOutThenNext(){
+    if (!player || !autoModeActive) return;
+    const steps = 15;
+    const stepMs = FADE_MS / steps;
+    let i = 0;
+    fadeIntervalHandle = setInterval(async () => {
+      i++;
+      const v = Math.max(0, DEFAULT_VOLUME * (1 - i / steps));
+      try{ await player.setVolume(v); } catch(e){ /* ignore */ }
+      if (i >= steps){
+        clearInterval(fadeIntervalHandle);
+        fadeIntervalHandle = null;
+        try{ await player.nextTrack(); } catch(e){ /* ignore */ }
+      }
+    }, stepMs);
+  }
+
+  function fadeIn(){
+    if (!player) return;
+    const steps = 15;
+    const stepMs = FADE_MS / steps;
+    let i = 0;
+    const handle = setInterval(async () => {
+      i++;
+      const v = Math.min(DEFAULT_VOLUME, DEFAULT_VOLUME * (i / steps));
+      try{ await player.setVolume(v); } catch(e){ /* ignore */ }
+      if (i >= steps) clearInterval(handle);
+    }, stepMs);
   }
 
   function renderAutoPlaylistPanel(entries){
