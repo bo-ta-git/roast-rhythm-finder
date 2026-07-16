@@ -632,9 +632,10 @@
   let djModeEnabled = true;
   let segmentSeconds = 30;
   let lastAutoTrackUri = null;
+  let autoQueueIndex = 0;
   let segmentTimer = null;
   let fadeIntervalHandle = null;
-  const FADE_MS = 1500;
+  const FADE_MS = 500;
   const DEFAULT_VOLUME = 0.8;
 
   function getTempoTerm(bpm){
@@ -808,8 +809,8 @@
           }
         }
         const queueEmpty = !state.track_window || !state.track_window.next_tracks || state.track_window.next_tracks.length === 0;
-        if (autoModeActive && state.paused && queueEmpty){
-          // オートモードのキューが最後まで流れきったので、同じテンポの曲でループする
+        if (autoModeActive && !djModeEnabled && state.paused && queueEmpty){
+          // オートモードのキュー(フル再生)が最後まで流れきったので、同じテンポの曲でループする
           startPlayback(autoQueueUris).catch(() => {});
         }
       }
@@ -821,6 +822,7 @@
   async function stopPlayback(){
     autoModeActive = false;
     autoQueueUris = [];
+    autoQueueIndex = 0;
     lastAutoTrackUri = null;
     clearSegmentTimers();
     renderAutoPlaylistPanel([]);
@@ -874,18 +876,20 @@
     return data.tracks && data.tracks.items && data.tracks.items[0];
   }
 
-  async function startPlayback(uriOrUris, retried){
+  async function startPlayback(uriOrUris, offsetIndex, retried){
     const uriList = Array.isArray(uriOrUris) ? uriOrUris : [uriOrUris];
+    const body = { uris: uriList };
+    if (typeof offsetIndex === 'number') body.offset = { position: offsetIndex };
     const resp = await fetch('https://api.spotify.com/v1/me/player/play?device_id=' + deviceId, {
       method: 'PUT',
       headers: {
         Authorization: 'Bearer ' + accessToken,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ uris: uriList }),
+      body: JSON.stringify(body),
     });
     if (resp.status === 401 && !retried){
-      if (await refreshAccessToken()) return startPlayback(uriOrUris, true);
+      if (await refreshAccessToken()) return startPlayback(uriOrUris, offsetIndex, true);
       return;
     }
     if (!resp.ok) throw new Error('playback failed: ' + resp.status);
@@ -1310,6 +1314,7 @@
     }
 
     lastAutoTrackUri = null;
+    autoQueueIndex = 0;
     clearSegmentTimers();
     if (player){ try{ await player.setVolume(DEFAULT_VOLUME); } catch(e){} }
 
@@ -1356,8 +1361,8 @@
   }
 
   function fadeOutThenNext(){
-    if (!player || !autoModeActive) return;
-    const steps = 15;
+    if (!player || !autoModeActive || autoQueueUris.length === 0) return;
+    const steps = 6;
     const stepMs = FADE_MS / steps;
     let i = 0;
     fadeIntervalHandle = setInterval(async () => {
@@ -1367,14 +1372,17 @@
       if (i >= steps){
         clearInterval(fadeIntervalHandle);
         fadeIntervalHandle = null;
-        try{ await player.nextTrack(); } catch(e){ /* ignore */ }
+        // SDKのnextTrack()には頼らず、自前でインデックスを進めて再生を開始する
+        // (2つの仕組みが競合して1曲目が飛ぶ不具合を避けるため)
+        autoQueueIndex = (autoQueueIndex + 1) % autoQueueUris.length;
+        try{ await startPlayback(autoQueueUris, autoQueueIndex); } catch(e){ console.error(e); }
       }
     }, stepMs);
   }
 
   function fadeIn(){
     if (!player) return;
-    const steps = 15;
+    const steps = 6;
     const stepMs = FADE_MS / steps;
     let i = 0;
     const handle = setInterval(async () => {
