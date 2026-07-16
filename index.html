@@ -164,6 +164,21 @@
     color: var(--copper-bright);
     border: 1px solid var(--copper);
   }
+  .auto-btn{
+    font-family: var(--font-display);
+    font-weight:700;
+    font-size: 19px;
+    letter-spacing:0.02em;
+    color: var(--cream);
+    background: transparent;
+    border: 1px solid var(--copper);
+    border-radius: 999px;
+    padding: 14px 28px;
+    cursor:pointer;
+    width:100%;
+  }
+  .auto-btn:active{ background: rgba(193,121,60,0.14); }
+  .auto-btn:disabled{ opacity:0.6; cursor:default; }
   .listen-hint{
     margin:0;
     font-size: 12.5px;
@@ -421,6 +436,11 @@
     </div>
   </div>
 
+  <div class="listen-zone">
+    <button class="auto-btn" id="autoBtn" type="button">🔁 オートで探して流す(5秒判定)</button>
+    <p class="listen-hint" id="autoHint">5秒間だけ音を聞いてテンポを判定し、近い曲を自動で流し続けます。止めるまでループします。</p>
+  </div>
+
   <div class="controls">
     <button class="reset-btn" id="resetBtn">リセット</button>
     <span class="tap-count" id="onsetCount"></span>
@@ -506,6 +526,8 @@
   const listenHintEl = document.getElementById('listenHint');
   const levelMeterFillEl = document.getElementById('levelMeterFill');
   const sensitivitySlider = document.getElementById('sensitivitySlider');
+  const autoBtnEl = document.getElementById('autoBtn');
+  const autoHintEl = document.getElementById('autoHint');
   const spotifyStatusEl = document.getElementById('spotifyStatus');
   const spotifyAuthBtn = document.getElementById('spotifyAuthBtn');
   const nowPlayingBarEl = document.getElementById('nowPlayingBar');
@@ -522,6 +544,11 @@
   let sdkReady = false;
   let isPlaying = false;
   let nowPlayingText = '';
+
+  // ---- オートマティックモードの状態 ----
+  let autoModeActive = false;   // 自動生成した曲リストがループ再生中かどうか
+  let autoDetecting = false;    // 5秒間のリズム判定中かどうか
+  let autoQueueUris = [];
 
   function getTempoTerm(bpm){
     if (bpm < 60) return 'Largo';
@@ -682,6 +709,11 @@
           const artists = track.artists.map(a => a.name).join(', ');
           nowPlayingText = track.name + ' - ' + artists;
         }
+        const queueEmpty = !state.track_window || !state.track_window.next_tracks || state.track_window.next_tracks.length === 0;
+        if (autoModeActive && state.paused && queueEmpty){
+          // オートモードのキューが最後まで流れきったので、同じテンポの曲でループする
+          startPlayback(autoQueueUris).catch(() => {});
+        }
       }
       updateNowPlayingUI();
     });
@@ -689,6 +721,11 @@
   }
 
   async function stopPlayback(){
+    autoModeActive = false;
+    if (autoBtnEl){
+      autoBtnEl.textContent = '🔁 オートで探して流す(5秒判定)';
+      autoBtnEl.disabled = false;
+    }
     if (!player) return;
     try{ await player.pause(); } catch(e){ console.error(e); }
   }
@@ -734,17 +771,18 @@
     return data.tracks && data.tracks.items && data.tracks.items[0];
   }
 
-  async function startPlayback(uri, retried){
+  async function startPlayback(uriOrUris, retried){
+    const uriList = Array.isArray(uriOrUris) ? uriOrUris : [uriOrUris];
     const resp = await fetch('https://api.spotify.com/v1/me/player/play?device_id=' + deviceId, {
       method: 'PUT',
       headers: {
         Authorization: 'Bearer ' + accessToken,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ uris: [uri] }),
+      body: JSON.stringify({ uris: uriList }),
     });
     if (resp.status === 401 && !retried){
-      if (await refreshAccessToken()) return startPlayback(uri, true);
+      if (await refreshAccessToken()) return startPlayback(uriOrUris, true);
       return;
     }
     if (!resp.ok) throw new Error('playback failed: ' + resp.status);
@@ -998,6 +1036,178 @@
     onsetCountEl.textContent = '';
     beansEl.classList.remove('spinning');
   });
+
+  // ---------- オートマティックモード（5秒判定→トリム平均→自動でプレイリスト再生） ----------
+  const AUTO_DEFAULT_LABEL = '🔁 オートで探して流す(5秒判定)';
+  const AUTO_STOP_LABEL = '■ オート再生を停止';
+
+  autoBtnEl.addEventListener('click', () => {
+    if (autoModeActive){
+      stopPlayback();
+    } else if (!autoDetecting){
+      runAutoDetection();
+    }
+  });
+
+  function trimmedMeanBpm(intervals){
+    let arr = intervals.slice();
+    if (arr.length >= 3){
+      arr.sort((a, b) => a - b);
+      arr = arr.slice(1, arr.length - 1); // 最大値・最小値を1つずつ除外
+    }
+    const avgInterval = arr.reduce((a, b) => a + b, 0) / arr.length;
+    return Math.round(60000 / avgInterval);
+  }
+
+  async function runAutoDetection(){
+    if (!accessToken || !deviceId){
+      alert('オートマティックモードを使うには、先にSpotifyへログインして再生準備が整っている必要があります。');
+      return;
+    }
+
+    let micStreamAuto, audioContextAuto, analyserAuto, dataArrayAuto;
+    try{
+      micStreamAuto = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+      });
+    } catch(err){
+      alert('マイクへのアクセスが許可されませんでした。ブラウザの設定でマイクを許可してから、もう一度お試しください。');
+      return;
+    }
+
+    autoDetecting = true;
+    autoBtnEl.disabled = true;
+    autoHintEl.textContent = '5秒間、ドラムの音を聞いています…';
+
+    audioContextAuto = new (window.AudioContext || window.webkitAudioContext)();
+    try{ await audioContextAuto.resume(); } catch(e){ /* ignore */ }
+
+    const sourceNodeAuto = audioContextAuto.createMediaStreamSource(micStreamAuto);
+    const filterAuto = audioContextAuto.createBiquadFilter();
+    filterAuto.type = 'highpass';
+    filterAuto.frequency.value = 1000;
+    analyserAuto = audioContextAuto.createAnalyser();
+    analyserAuto.fftSize = 1024;
+    analyserAuto.smoothingTimeConstant = 0;
+    sourceNodeAuto.connect(filterAuto);
+    filterAuto.connect(analyserAuto);
+    dataArrayAuto = new Uint8Array(analyserAuto.fftSize);
+
+    const startTime = performance.now();
+    const duration = 5000;
+    let energyHistoryAuto = [];
+    let lastOnsetAuto = 0;
+    const onsetTimestamps = [];
+
+    function step(){
+      const now = performance.now();
+      const elapsed = now - startTime;
+      const remaining = Math.max(0, Math.ceil((duration - elapsed) / 1000));
+      autoBtnEl.textContent = '検出中… ' + remaining;
+
+      analyserAuto.getByteTimeDomainData(dataArrayAuto);
+      let sumSquares = 0;
+      for (let i = 0; i < dataArrayAuto.length; i++){
+        const v = (dataArrayAuto[i] - 128) / 128;
+        sumSquares += v * v;
+      }
+      const rms = Math.sqrt(sumSquares / dataArrayAuto.length);
+
+      energyHistoryAuto.push(rms);
+      if (energyHistoryAuto.length > 43) energyHistoryAuto.shift();
+      const avg = energyHistoryAuto.reduce((a, b) => a + b, 0) / energyHistoryAuto.length;
+      const cutoff = avg * sensitivity + 0.015;
+
+      if (rms > cutoff && (now - lastOnsetAuto) > 180){
+        lastOnsetAuto = now;
+        onsetTimestamps.push(now);
+      }
+
+      if (elapsed < duration){
+        requestAnimationFrame(step);
+      } else {
+        finishAutoDetection();
+      }
+    }
+
+    function finishAutoDetection(){
+      micStreamAuto.getTracks().forEach(t => t.stop());
+      audioContextAuto.close().catch(() => {});
+      autoDetecting = false;
+      autoHintEl.textContent = '5秒間だけ音を聞いてテンポを判定し、近い曲を自動で流し続けます。止めるまでループします。';
+
+      const intervals = [];
+      for (let i = 1; i < onsetTimestamps.length; i++){
+        intervals.push(onsetTimestamps[i] - onsetTimestamps[i - 1]);
+      }
+
+      if (intervals.length < 2){
+        alert('リズムをうまく検出できませんでした。ドラムの近くでもう一度お試しください。');
+        autoBtnEl.textContent = AUTO_DEFAULT_LABEL;
+        autoBtnEl.disabled = false;
+        return;
+      }
+
+      const bpm = trimmedMeanBpm(intervals);
+      startAutoPlaylist(bpm);
+    }
+
+    requestAnimationFrame(step);
+  }
+
+  async function startAutoPlaylist(bpm){
+    lastBpm = bpm;
+    bpmNumberEl.textContent = bpm;
+    tempoTermEl.textContent = getTempoTerm(bpm);
+    matchesHintEl.style.display = 'none';
+    renderMatches(bpm);
+
+    const scored = SONGS.map(s => {
+      const candidates = [
+        {diff: Math.abs(s.bpm - bpm)},
+        {diff: Math.abs(s.bpm - bpm * 2)},
+        {diff: Math.abs(s.bpm - bpm / 2)},
+      ];
+      candidates.sort((a, b) => a.diff - b.diff);
+      return {song: s, diff: candidates[0].diff};
+    });
+    scored.sort((a, b) => a.diff - b.diff);
+    let selected = scored.filter(x => x.diff <= 8);
+    if (selected.length < 3) selected = scored.slice(0, 5);
+    else selected = selected.slice(0, 8);
+
+    autoBtnEl.textContent = '曲を検索中…';
+    const uris = [];
+    for (const {song} of selected){
+      try{
+        const track = await searchTrack(song);
+        if (track) uris.push(track.uri);
+      } catch(e){ console.error(e); }
+    }
+
+    if (uris.length === 0){
+      alert('該当する曲がSpotifyで見つかりませんでした。');
+      autoBtnEl.textContent = AUTO_DEFAULT_LABEL;
+      autoBtnEl.disabled = false;
+      return;
+    }
+
+    if (player && typeof player.activateElement === 'function'){
+      try{ player.activateElement(); } catch(e){ /* ignore */ }
+    }
+
+    autoQueueUris = uris;
+    autoModeActive = true;
+    try{
+      await startPlayback(uris);
+    } catch(e){
+      alert('再生に失敗しました。特にiPhoneでは、もう一度ボタンをタップすると成功することがあります。');
+      autoModeActive = false;
+    }
+
+    autoBtnEl.textContent = autoModeActive ? AUTO_STOP_LABEL : AUTO_DEFAULT_LABEL;
+    autoBtnEl.disabled = false;
+  }
 </script>
 </body>
 </html>
