@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>ROAST RHYTHM — 焙煎ドラムの音でテンポを探す</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #2a1810;
+    --bg-deep: #190d08;
+    --panel: #3a2417;
+    --panel-line: rgba(193,121,60,0.25);
+    --copper: #c1793c;
+    --copper-bright: #e0965a;
+    --copper-dim: #7d4f28;
+    --cream: #f1e4d1;
+    --cream-dim: #b6a48c;
+    --font-display: 'Fraunces', serif;
+    --font-body: 'Source Serif 4', serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0; min-height:100%;
+    background: var(--bg-deep);
+    -webkit-tap-highlight-color: transparent;
+  }
+  body{
+    min-height: 100dvh;
+    display:flex;
+    justify-content:center;
+    align-items:flex-start;
+    background:
+      radial-gradient(ellipse at 50% -10%, rgba(193,121,60,0.10), transparent 55%),
+      var(--bg-deep);
+    font-family: var(--font-body);
+    color: var(--cream);
+  }
+  .phone{
+    width:100%;
+    max-width:480px;
+    min-height:100dvh;
+    background: var(--bg);
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    box-shadow: 0 0 60px rgba(0,0,0,0.5);
+    overflow-x:hidden;
+  }
+  .phone::before{
+    content:"";
+    position:absolute; inset:0;
+    background-image: repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px);
+    pointer-events:none;
+  }
+
+  header.masthead{
+    padding: 28px 24px 8px;
+    position:relative;
+    z-index:1;
+  }
+  .eyebrow{
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--copper);
+    margin:0 0 6px;
+    text-transform:uppercase;
+  }
+  h1{
+    font-family: var(--font-display);
+    font-weight:800;
+    font-size: 42px;
+    letter-spacing: 0.01em;
+    margin:0;
+    line-height:0.98;
+    color: var(--cream);
+  }
+  .lede{
+    margin: 10px 0 0;
+    font-size: 14.5px;
+    line-height:1.6;
+    color: var(--cream-dim);
+    max-width: 36ch;
+  }
+
+  section.readout{
+    position:relative; z-index:1;
+    display:flex;
+    align-items:center;
+    gap: 18px;
+    padding: 10px 24px 4px;
+  }
+  .drum{ width: 72px; height: 72px; flex-shrink:0; overflow:visible; }
+  .drum-outline{ fill:none; stroke: var(--copper-dim); stroke-width:3; }
+  .drum-window{ fill:none; stroke: var(--copper); stroke-width:2; opacity:0.6; }
+  .beans{ transform-box: fill-box; transform-origin: center; }
+  .beans.spinning{ animation-name: spin; animation-timing-function: linear; animation-iteration-count: infinite; }
+  .bean{ fill: var(--copper-bright); }
+  @keyframes spin{
+    from{ transform: rotate(0deg); }
+    to{ transform: rotate(360deg); }
+  }
+
+  .bpm-block{ display:flex; align-items:baseline; gap:6px; }
+  .bpm-number{
+    font-family: var(--font-mono);
+    font-weight:700;
+    font-size: 50px;
+    line-height:1;
+    color: var(--cream);
+    min-width: 1.5ch;
+  }
+  .bpm-unit{
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--copper);
+    letter-spacing:0.08em;
+  }
+  .tempo-term{
+    position:absolute;
+    right:24px; top: 50%;
+    transform: translateY(-50%);
+    margin:0;
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight:700;
+    letter-spacing:0.03em;
+    color: var(--copper-bright);
+    text-align:right;
+  }
+
+  .listen-zone{
+    position:relative; z-index:1;
+    margin: 18px 24px 8px;
+    padding: 22px 20px;
+    border-radius: 20px;
+    border: 1px solid var(--panel-line);
+    background: linear-gradient(180deg, var(--panel), rgba(58,36,23,0.6));
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:14px;
+  }
+  .listen-btn{
+    font-family: var(--font-display);
+    font-weight:700;
+    font-size: 19px;
+    letter-spacing:0.02em;
+    color: var(--bg-deep);
+    background: var(--copper);
+    border:none;
+    border-radius: 999px;
+    padding: 14px 28px;
+    cursor:pointer;
+    width:100%;
+  }
+  .listen-btn:active{ background: var(--copper-bright); }
+  .listen-btn.is-listening{
+    background: transparent;
+    color: var(--copper-bright);
+    border: 1px solid var(--copper);
+  }
+  .listen-hint{
+    margin:0;
+    font-size: 12.5px;
+    color: var(--cream-dim);
+    text-align:center;
+  }
+  .level-meter{
+    width:100%;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.06);
+    overflow:hidden;
+  }
+  .level-meter-fill{
+    height:100%;
+    width:0%;
+    background: linear-gradient(90deg, var(--copper-dim), var(--copper-bright));
+    transition: width 0.05s linear;
+  }
+  .sensitivity-row{
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .sensitivity-label{
+    display:flex;
+    justify-content:space-between;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--cream-dim);
+  }
+  .sensitivity-row input[type="range"]{
+    width:100%;
+    accent-color: var(--copper);
+  }
+
+  .controls{
+    position:relative; z-index:1;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding: 4px 24px 14px;
+  }
+  .reset-btn{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing:0.06em;
+    color: var(--cream);
+    background: transparent;
+    border: 1px solid var(--panel-line);
+    border-radius: 999px;
+    padding: 8px 16px;
+    cursor:pointer;
+  }
+  .reset-btn:active{ background: rgba(193,121,60,0.12); }
+  .tap-count{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--copper-dim);
+  }
+
+  section.matches{
+    position:relative; z-index:1;
+    padding: 8px 24px 40px;
+    flex:1;
+  }
+  section.matches h2{
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight:700;
+    letter-spacing:0.02em;
+    margin: 10px 0 4px;
+    color: var(--cream);
+  }
+  .matches-hint{
+    font-size: 13px;
+    color: var(--cream-dim);
+    margin: 0 0 12px;
+  }
+  .song-list{
+    list-style:none;
+    margin:0; padding:0;
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .song-item{
+    display:flex;
+    flex-direction:column;
+    gap: 9px;
+    padding: 11px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--panel-line);
+    background: rgba(255,255,255,0.02);
+  }
+  .song-item.exact{ border-color: var(--copper); background: rgba(193,121,60,0.09); }
+  .song-item.close{ border-color: var(--panel-line); }
+  .song-item.far{ opacity: 0.55; }
+  .song-top{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap: 12px;
+  }
+  .song-main{ display:flex; flex-direction:column; min-width:0; }
+  .song-title{
+    font-size: 14.5px;
+    font-weight:600;
+    color: var(--cream);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .song-artist{
+    font-size: 12.5px;
+    color: var(--cream-dim);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .song-meta{
+    display:flex; flex-direction:column; align-items:flex-end; flex-shrink:0;
+    font-family: var(--font-mono);
+  }
+  .song-bpm{ font-size:13px; color: var(--copper-bright); }
+  .song-badge{ font-size:10.5px; color: var(--cream-dim); margin-top:2px; }
+  .song-spotify{
+    display:block;
+    width:100%;
+    text-align:center;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing:0.02em;
+    color: var(--copper-bright);
+    text-decoration:none;
+    background: transparent;
+    border: 1px solid var(--copper-dim);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin:0;
+    cursor:pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .song-spotify:active{ background: rgba(193,121,60,0.14); }
+  .song-spotify.song-spotify-play{ border-color: var(--copper); font-weight:700; }
+  .song-spotify:disabled{ opacity:0.6; cursor:default; }
+
+  .spotify-bar{
+    position:relative; z-index:1;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin: 0 24px 16px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--panel-line);
+    background: rgba(255,255,255,0.02);
+  }
+  .spotify-status{
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--cream-dim);
+  }
+  .spotify-btn{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing:0.03em;
+    color: var(--bg-deep);
+    background: var(--copper);
+    border: none;
+    border-radius: 999px;
+    padding: 8px 14px;
+    cursor:pointer;
+    flex-shrink:0;
+  }
+  .spotify-btn:active{ background: var(--copper-bright); }
+
+  .now-playing-bar{
+    position:relative; z-index:1;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin: 0 24px 16px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--copper);
+    background: rgba(193,121,60,0.09);
+  }
+  .now-playing-label{
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--copper-bright);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .stop-btn{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing:0.03em;
+    color: var(--cream);
+    background: transparent;
+    border: 1px solid var(--copper-dim);
+    border-radius: 999px;
+    padding: 6px 12px;
+    cursor:pointer;
+    flex-shrink:0;
+  }
+  .stop-btn:active{ background: rgba(193,121,60,0.14); }
+
+  .footnote{
+    margin-top: 18px;
+    font-size: 11.5px;
+    line-height:1.6;
+    color: var(--cream-dim);
+    opacity:0.85;
+  }
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <header class="masthead">
+    <p class="eyebrow">MIC → PLAYLIST</p>
+    <h1>ROAST RHYTHM</h1>
+    <p class="lede">焙煎ドラムの中で豆が踊る音をマイクで拾い、そのリズムに近い曲を探して再生します。</p>
+  </header>
+
+  <section class="readout">
+    <svg class="drum" viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="40" class="drum-outline"/>
+      <circle cx="50" cy="50" r="26" class="drum-window"/>
+      <g id="beans" class="beans">
+        <circle cx="50" cy="26" r="4" class="bean"/>
+        <circle cx="68" cy="44" r="3.5" class="bean"/>
+        <circle cx="60" cy="66" r="4.5" class="bean"/>
+        <circle cx="38" cy="64" r="3.5" class="bean"/>
+        <circle cx="32" cy="40" r="4" class="bean"/>
+      </g>
+    </svg>
+    <div class="bpm-block">
+      <span class="bpm-number" id="bpmNumber">--</span>
+      <span class="bpm-unit">BPM</span>
+    </div>
+    <p class="tempo-term" id="tempoTerm">待機中</p>
+  </section>
+
+  <div class="listen-zone">
+    <button class="listen-btn" id="listenBtn" type="button">🎙️ リスニング開始</button>
+    <p class="listen-hint" id="listenHint">焙煎機の近くに置いて開始してください。</p>
+    <div class="level-meter"><div class="level-meter-fill" id="levelMeterFill"></div></div>
+    <div class="sensitivity-row">
+      <div class="sensitivity-label">
+        <span>感度</span>
+        <span>周りの音が大きい場合は下げてください</span>
+      </div>
+      <input type="range" id="sensitivitySlider" min="1.1" max="2.5" step="0.05" value="1.35">
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="reset-btn" id="resetBtn">リセット</button>
+    <span class="tap-count" id="onsetCount"></span>
+  </div>
+
+  <div class="spotify-bar">
+    <span class="spotify-status" id="spotifyStatus">Spotify: 未接続</span>
+    <button class="spotify-btn" id="spotifyAuthBtn" type="button">Spotifyでログイン</button>
+  </div>
+
+  <div class="now-playing-bar" id="nowPlayingBar" style="display:none;">
+    <span class="now-playing-label" id="nowPlayingLabel"></span>
+    <button class="stop-btn" id="stopBtn" type="button">■ 停止</button>
+  </div>
+
+  <section class="matches">
+    <h2>このテンポに近い曲</h2>
+    <p class="matches-hint" id="matchesHint">音を検出すると候補が表示されます。</p>
+    <ul class="song-list" id="songList"></ul>
+    <p class="footnote">収録曲のBPMはおおよその目安です。マイクが周囲の音（換気扇、話し声など）を拾うと精度が落ちるので、感度スライダーで調整してください。Spotifyにログインして再生準備が整うと、ボタンが「▶ Spotifyで再生」に変わり、その場で曲が再生されます（Spotify Premiumが必要です）。</p>
+  </section>
+
+</div>
+
+<script src="https://sdk.scdn.co/spotify-player.js"></script>
+<script>
+  // ▼▼▼ 前回作ったアプリと「同じ」Client IDを入れてください（Spotifyの規定で開発者は1つのClient IDしか持てません）▼▼▼
+  // ▼▼▼ Redirect URIは、この新しいページを公開したURLを、Spotify Developer Dashboardに追加登録してから入れてください ▼▼▼
+  const SPOTIFY_CLIENT_ID = 'YOUR_CLIENT_ID_HERE';
+  const REDIRECT_URI = 'https://YOUR_GITHUB_USERNAME.github.io/YOUR_NEW_REPO_NAME/';
+  // ▲▲▲ この2つを書き換えたら準備完了です ▲▲▲
+
+  const SONGS = [
+    {title:"Someone Like You", artist:"Adele", bpm:67},
+    {title:"Perfect", artist:"Ed Sheeran", bpm:63},
+    {title:"All of Me", artist:"John Legend", bpm:63},
+    {title:"Hotel California", artist:"Eagles", bpm:75},
+    {title:"We Will Rock You", artist:"Queen", bpm:81},
+    {title:"Lemon", artist:"米津玄師", bpm:87},
+    {title:"Can't Stop", artist:"Red Hot Chili Peppers", bpm:91},
+    {title:"Africa", artist:"Toto", bpm:96},
+    {title:"Shape of You", artist:"Ed Sheeran", bpm:96},
+    {title:"Watermelon Sugar", artist:"Harry Styles", bpm:95},
+    {title:"Dancing Queen", artist:"ABBA", bpm:100},
+    {title:"Levitating", artist:"Dua Lipa", bpm:103},
+    {title:"Stayin' Alive", artist:"Bee Gees", bpm:104},
+    {title:"Rolling in the Deep", artist:"Adele", bpm:105},
+    {title:"Uptown Girl", artist:"Billy Joel", bpm:108},
+    {title:"Eye of the Tiger", artist:"Survivor", bpm:109},
+    {title:"Another One Bites the Dust", artist:"Queen", bpm:110},
+    {title:"Can't Stop the Feeling!", artist:"Justin Timberlake", bpm:113},
+    {title:"Uptown Funk", artist:"Mark Ronson ft. Bruno Mars", bpm:115},
+    {title:"Get Lucky", artist:"Daft Punk ft. Pharrell Williams", bpm:116},
+    {title:"Billie Jean", artist:"Michael Jackson", bpm:117},
+    {title:"Don't Stop Believin'", artist:"Journey", bpm:119},
+    {title:"I Wanna Dance with Somebody", artist:"Whitney Houston", bpm:119},
+    {title:"Livin' on a Prayer", artist:"Bon Jovi", bpm:122},
+    {title:"One More Time", artist:"Daft Punk", bpm:123},
+    {title:"Seven Nation Army", artist:"The White Stripes", bpm:124},
+    {title:"Sweet Child O' Mine", artist:"Guns N' Roses", bpm:125},
+    {title:"September", artist:"Earth, Wind & Fire", bpm:126},
+    {title:"アイドル", artist:"YOASOBI", bpm:128},
+    {title:"Pretender", artist:"Official髭男dism", bpm:130},
+    {title:"残酷な天使のテーゼ", artist:"高橋洋子", bpm:130},
+    {title:"Clocks", artist:"Coldplay", bpm:131},
+    {title:"Thunderstruck", artist:"AC/DC", bpm:133},
+    {title:"Viva La Vida", artist:"Coldplay", bpm:138},
+    {title:"紅蓮華", artist:"LiSA", bpm:138},
+    {title:"Mr. Brightside", artist:"The Killers", bpm:148},
+    {title:"Happy", artist:"Pharrell Williams", bpm:160},
+    {title:"Take on Me", artist:"a-ha", bpm:169},
+    {title:"Blinding Lights", artist:"The Weeknd", bpm:171},
+  ];
+
+  const bpmNumberEl = document.getElementById('bpmNumber');
+  const tempoTermEl = document.getElementById('tempoTerm');
+  const onsetCountEl = document.getElementById('onsetCount');
+  const beansEl = document.getElementById('beans');
+  const songListEl = document.getElementById('songList');
+  const matchesHintEl = document.getElementById('matchesHint');
+  const resetBtn = document.getElementById('resetBtn');
+  const listenBtn = document.getElementById('listenBtn');
+  const listenHintEl = document.getElementById('listenHint');
+  const levelMeterFillEl = document.getElementById('levelMeterFill');
+  const sensitivitySlider = document.getElementById('sensitivitySlider');
+  const spotifyStatusEl = document.getElementById('spotifyStatus');
+  const spotifyAuthBtn = document.getElementById('spotifyAuthBtn');
+  const nowPlayingBarEl = document.getElementById('nowPlayingBar');
+  const nowPlayingLabelEl = document.getElementById('nowPlayingLabel');
+  const stopBtn = document.getElementById('stopBtn');
+
+  let lastBpm = null;
+
+  // ---- Spotify連携の状態 ----
+  let accessToken = null;
+  let tokenExpiresAt = 0;
+  let player = null;
+  let deviceId = null;
+  let sdkReady = false;
+  let isPlaying = false;
+  let nowPlayingText = '';
+
+  function getTempoTerm(bpm){
+    if (bpm < 60) return 'Largo';
+    if (bpm < 66) return 'Larghetto';
+    if (bpm < 76) return 'Adagio';
+    if (bpm < 108) return 'Andante';
+    if (bpm < 120) return 'Moderato';
+    if (bpm < 156) return 'Allegro';
+    if (bpm < 176) return 'Vivace';
+    if (bpm < 200) return 'Presto';
+    return 'Prestissimo';
+  }
+
+  function escapeHtml(str){
+    return str.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  // ---------- Spotify: PKCE認証 ----------
+  function generateRandomString(length){
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const randomValues = crypto.getRandomValues(new Uint8Array(length));
+    let text = '';
+    randomValues.forEach(v => { text += possible[v % possible.length]; });
+    return text;
+  }
+
+  async function sha256(plain){
+    const data = new TextEncoder().encode(plain);
+    return crypto.subtle.digest('SHA-256', data);
+  }
+
+  function base64UrlEncode(buffer){
+    let str = '';
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.byteLength; i++) str += String.fromCharCode(bytes[i]);
+    return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  async function redirectToSpotifyAuth(){
+    const codeVerifier = generateRandomString(64);
+    localStorage.setItem('spotify_code_verifier', codeVerifier);
+    const codeChallenge = base64UrlEncode(await sha256(codeVerifier));
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: SPOTIFY_CLIENT_ID,
+      scope: 'streaming user-read-email user-read-private user-modify-playback-state user-read-playback-state',
+      code_challenge_method: 'S256',
+      code_challenge: codeChallenge,
+      redirect_uri: REDIRECT_URI,
+    });
+    window.location.href = 'https://accounts.spotify.com/authorize?' + params.toString();
+  }
+
+  async function handleAuthRedirect(){
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (!code) return false;
+    const codeVerifier = localStorage.getItem('spotify_code_verifier');
+    if (!codeVerifier) return false;
+
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: REDIRECT_URI,
+      client_id: SPOTIFY_CLIENT_ID,
+      code_verifier: codeVerifier,
+    });
+    const resp = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body,
+    });
+    const data = await resp.json();
+    if (data.access_token){
+      applyToken(data);
+      window.history.replaceState({}, document.title, REDIRECT_URI);
+      return true;
+    }
+    return false;
+  }
+
+  function applyToken(data){
+    accessToken = data.access_token;
+    tokenExpiresAt = Date.now() + data.expires_in * 1000;
+    localStorage.setItem('spotify_access_token', accessToken);
+    localStorage.setItem('spotify_token_expires_at', String(tokenExpiresAt));
+    if (data.refresh_token){
+      localStorage.setItem('spotify_refresh_token', data.refresh_token);
+    }
+  }
+
+  async function refreshAccessToken(){
+    const rt = localStorage.getItem('spotify_refresh_token');
+    if (!rt) return false;
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: rt,
+      client_id: SPOTIFY_CLIENT_ID,
+    });
+    const resp = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body,
+    });
+    const data = await resp.json();
+    if (data.access_token){
+      applyToken(data);
+      return true;
+    }
+    return false;
+  }
+
+  function logoutSpotify(){
+    ['spotify_access_token','spotify_refresh_token','spotify_token_expires_at','spotify_code_verifier']
+      .forEach(k => localStorage.removeItem(k));
+    accessToken = null;
+    deviceId = null;
+    isPlaying = false;
+    nowPlayingText = '';
+    if (player){ player.disconnect(); player = null; }
+    updateSpotifyStatusUI();
+    updateNowPlayingUI();
+    if (lastBpm !== null) renderMatches(lastBpm);
+  }
+
+  // ---------- Spotify: Web Playback SDK ----------
+  window.onSpotifyWebPlaybackSDKReady = () => {
+    sdkReady = true;
+    tryInitPlayer();
+  };
+
+  function tryInitPlayer(){
+    if (player || !sdkReady || !accessToken || !window.Spotify) return;
+    player = new Spotify.Player({
+      name: 'Roast Rhythm Finder',
+      getOAuthToken: cb => cb(accessToken),
+      volume: 0.8,
+    });
+    player.addListener('ready', ({device_id}) => {
+      deviceId = device_id;
+      updateSpotifyStatusUI();
+      if (lastBpm !== null) renderMatches(lastBpm);
+    });
+    player.addListener('not_ready', () => {
+      deviceId = null;
+      updateSpotifyStatusUI();
+    });
+    player.addListener('authentication_error', () => { refreshAccessToken(); });
+    player.addListener('player_state_changed', (state) => {
+      if (!state){
+        isPlaying = false;
+        nowPlayingText = '';
+      } else {
+        isPlaying = !state.paused;
+        const track = state.track_window && state.track_window.current_track;
+        if (track){
+          const artists = track.artists.map(a => a.name).join(', ');
+          nowPlayingText = track.name + ' - ' + artists;
+        }
+      }
+      updateNowPlayingUI();
+    });
+    player.connect();
+  }
+
+  async function stopPlayback(){
+    if (!player) return;
+    try{ await player.pause(); } catch(e){ console.error(e); }
+  }
+
+  function updateNowPlayingUI(){
+    if (isPlaying && nowPlayingText){
+      nowPlayingBarEl.style.display = 'flex';
+      nowPlayingLabelEl.textContent = '再生中: ' + nowPlayingText;
+    } else {
+      nowPlayingBarEl.style.display = 'none';
+    }
+  }
+
+  function updateSpotifyStatusUI(){
+    if (!accessToken){
+      spotifyStatusEl.textContent = 'Spotify: 未接続';
+      spotifyAuthBtn.textContent = 'Spotifyでログイン';
+    } else if (!deviceId){
+      spotifyStatusEl.textContent = 'Spotify: 準備中…';
+      spotifyAuthBtn.textContent = 'ログアウト';
+    } else {
+      spotifyStatusEl.textContent = 'Spotify: 再生準備OK';
+      spotifyAuthBtn.textContent = 'ログアウト';
+    }
+  }
+
+  spotifyAuthBtn.addEventListener('click', () => {
+    if (accessToken) logoutSpotify();
+    else redirectToSpotifyAuth();
+  });
+
+  stopBtn.addEventListener('click', stopPlayback);
+
+  async function searchTrack(song, retried){
+    const q = encodeURIComponent(song.title + ' ' + song.artist);
+    const resp = await fetch('https://api.spotify.com/v1/search?q=' + q + '&type=track&limit=1', {
+      headers: { Authorization: 'Bearer ' + accessToken },
+    });
+    if (resp.status === 401 && !retried){
+      if (await refreshAccessToken()) return searchTrack(song, true);
+    }
+    const data = await resp.json();
+    return data.tracks && data.tracks.items && data.tracks.items[0];
+  }
+
+  async function startPlayback(uri, retried){
+    const resp = await fetch('https://api.spotify.com/v1/me/player/play?device_id=' + deviceId, {
+      method: 'PUT',
+      headers: {
+        Authorization: 'Bearer ' + accessToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ uris: [uri] }),
+    });
+    if (resp.status === 401 && !retried){
+      if (await refreshAccessToken()) return startPlayback(uri, true);
+      return;
+    }
+    if (!resp.ok) throw new Error('playback failed: ' + resp.status);
+  }
+
+  async function playOnSpotify(song, btnEl){
+    if (!accessToken || !deviceId){
+      alert('Spotifyの再生準備がまだ整っていません。少し待ってからもう一度お試しください。');
+      return;
+    }
+    if (player && typeof player.activateElement === 'function'){
+      try { player.activateElement(); } catch(e) { /* 古いSDKにはこのメソッドが無い場合がある */ }
+    }
+    const originalText = btnEl.textContent;
+    btnEl.textContent = '再生中…';
+    btnEl.disabled = true;
+    try{
+      const track = await searchTrack(song);
+      if (!track){
+        alert('該当する曲がSpotifyで見つかりませんでした。');
+        return;
+      }
+      await startPlayback(track.uri);
+    } catch(err){
+      alert('再生に失敗しました。特にiPhoneでは、もう一度ボタンをタップすると成功することがあります。');
+      console.error(err);
+    } finally {
+      btnEl.textContent = originalText;
+      btnEl.disabled = false;
+    }
+  }
+
+  async function bootstrapSpotifyAuth(){
+    const handled = await handleAuthRedirect();
+    if (!handled){
+      const storedToken = localStorage.getItem('spotify_access_token');
+      const expiresAt = Number(localStorage.getItem('spotify_token_expires_at') || 0);
+      if (storedToken && Date.now() < expiresAt){
+        accessToken = storedToken;
+      } else if (localStorage.getItem('spotify_refresh_token')){
+        await refreshAccessToken();
+      }
+    }
+    updateSpotifyStatusUI();
+    if (accessToken) tryInitPlayer();
+  }
+
+  bootstrapSpotifyAuth();
+
+  // ---------- 曲マッチングのリスト表示 ----------
+  function buildSongAction(song){
+    if (accessToken && deviceId){
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'song-spotify song-spotify-play';
+      btn.textContent = '▶ Spotifyで再生';
+      btn.addEventListener('click', () => playOnSpotify(song, btn));
+      return btn;
+    }
+    const a = document.createElement('a');
+    a.className = 'song-spotify';
+    a.href = 'https://open.spotify.com/search/' + encodeURIComponent(song.title + ' ' + song.artist);
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = 'Spotifyで検索して再生 ↗';
+    return a;
+  }
+
+  function renderMatches(bpm){
+    lastBpm = bpm;
+    const scored = SONGS.map(s => {
+      const candidates = [
+        {diff: Math.abs(s.bpm - bpm), label:'同じ速さ'},
+        {diff: Math.abs(s.bpm - bpm * 2), label:'半分の速さ'},
+        {diff: Math.abs(s.bpm - bpm / 2), label:'倍速'},
+      ];
+      candidates.sort((a,b) => a.diff - b.diff);
+      return {song: s, best: candidates[0]};
+    });
+    scored.sort((a,b) => a.best.diff - b.best.diff);
+    const top = scored.slice(0, 7);
+
+    songListEl.innerHTML = '';
+    top.forEach(({song, best}) => {
+      const closeness = best.diff <= 3 ? 'exact' : (best.diff <= 8 ? 'close' : 'far');
+      const li = document.createElement('li');
+      li.className = 'song-item ' + closeness;
+
+      const topRow = document.createElement('div');
+      topRow.className = 'song-top';
+      topRow.innerHTML =
+        '<div class="song-main">' +
+          '<span class="song-title">' + escapeHtml(song.title) + '</span>' +
+          '<span class="song-artist">' + escapeHtml(song.artist) + '</span>' +
+        '</div>' +
+        '<div class="song-meta">' +
+          '<span class="song-bpm">' + song.bpm + ' BPM</span>' +
+          '<span class="song-badge">' + best.label + '</span>' +
+        '</div>';
+
+      li.appendChild(topRow);
+      li.appendChild(buildSongAction(song));
+      songListEl.appendChild(li);
+    });
+  }
+
+  // ---------- マイクでリズムを検出する ----------
+  let micStream = null;
+  let audioContext = null;
+  let analyserNode = null;
+  let filterNode = null;
+  let dataArray = null;
+  let listening = false;
+  let rafId = null;
+  let energyHistory = [];
+  let lastOnsetTime = 0;
+  let onsetIntervals = [];
+  let sensitivity = Number(sensitivitySlider.value);
+
+  sensitivitySlider.addEventListener('input', () => {
+    sensitivity = Number(sensitivitySlider.value);
+  });
+
+  async function startListening(){
+    try{
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+      });
+    } catch(err){
+      alert('マイクへのアクセスが許可されませんでした。ブラウザの設定でマイクを許可してから、もう一度お試しください。');
+      return;
+    }
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    try{ await audioContext.resume(); } catch(e){ /* ignore */ }
+
+    const sourceNode = audioContext.createMediaStreamSource(micStream);
+    filterNode = audioContext.createBiquadFilter();
+    filterNode.type = 'highpass';
+    filterNode.frequency.value = 1000; // 豆がぶつかる「シャンシャン」という高めの音を強調し、低いモーター音などを弱める
+
+    analyserNode = audioContext.createAnalyser();
+    analyserNode.fftSize = 1024;
+    analyserNode.smoothingTimeConstant = 0;
+
+    sourceNode.connect(filterNode);
+    filterNode.connect(analyserNode);
+
+    dataArray = new Uint8Array(analyserNode.fftSize);
+    energyHistory = [];
+    onsetIntervals = [];
+    lastOnsetTime = 0;
+
+    listening = true;
+    listenBtn.textContent = '■ リスニングを停止';
+    listenBtn.classList.add('is-listening');
+    listenHintEl.textContent = 'リスニング中… ドラムを回してみてください。';
+    beansEl.classList.remove('spinning');
+
+    loop();
+  }
+
+  function stopListening(){
+    listening = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    if (micStream) micStream.getTracks().forEach(t => t.stop());
+    if (audioContext) audioContext.close().catch(()=>{});
+    micStream = null;
+    audioContext = null;
+    analyserNode = null;
+
+    listenBtn.textContent = '🎙️ リスニング開始';
+    listenBtn.classList.remove('is-listening');
+    listenHintEl.textContent = '焙煎機の近くに置いて開始してください。';
+    levelMeterFillEl.style.width = '0%';
+    beansEl.classList.remove('spinning');
+  }
+
+  listenBtn.addEventListener('click', () => {
+    if (listening) stopListening();
+    else startListening();
+  });
+
+  function loop(){
+    if (!listening) return;
+    analyserNode.getByteTimeDomainData(dataArray);
+
+    let sumSquares = 0;
+    for (let i = 0; i < dataArray.length; i++){
+      const v = (dataArray[i] - 128) / 128;
+      sumSquares += v * v;
+    }
+    const rms = Math.sqrt(sumSquares / dataArray.length);
+
+    levelMeterFillEl.style.width = Math.min(100, rms * 260) + '%';
+
+    energyHistory.push(rms);
+    if (energyHistory.length > 43) energyHistory.shift();
+
+    const avg = energyHistory.reduce((a,b) => a + b, 0) / energyHistory.length;
+    const cutoff = avg * sensitivity + 0.015;
+
+    const now = performance.now();
+    if (rms > cutoff && (now - lastOnsetTime) > 180){
+      if (lastOnsetTime > 0){
+        const gap = now - lastOnsetTime;
+        if (gap > 4000){
+          onsetIntervals = [];
+        } else {
+          onsetIntervals.push(gap);
+          if (onsetIntervals.length > 8) onsetIntervals.shift();
+        }
+      }
+      lastOnsetTime = now;
+      updateFromOnsets();
+    }
+
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function updateFromOnsets(){
+    onsetCountEl.textContent = onsetIntervals.length > 0 ? ('検出 ' + (onsetIntervals.length + 1) + '回') : '';
+
+    if (onsetIntervals.length === 0){
+      bpmNumberEl.textContent = '--';
+      tempoTermEl.textContent = 'もう少し聴いています…';
+      return;
+    }
+
+    const avgInterval = onsetIntervals.reduce((a,b) => a + b, 0) / onsetIntervals.length;
+    const bpm = Math.round(60000 / avgInterval);
+    bpmNumberEl.textContent = bpm;
+    tempoTermEl.textContent = getTempoTerm(bpm);
+
+    beansEl.classList.add('spinning');
+    beansEl.style.animationDuration = Math.max(0.2, avgInterval / 1000) + 's';
+
+    if (onsetIntervals.length >= 3){
+      matchesHintEl.style.display = 'none';
+      renderMatches(bpm);
+    }
+  }
+
+  resetBtn.addEventListener('click', () => {
+    onsetIntervals = [];
+    lastOnsetTime = 0;
+    energyHistory = [];
+    songListEl.innerHTML = '';
+    matchesHintEl.style.display = 'block';
+    bpmNumberEl.textContent = '--';
+    tempoTermEl.textContent = listening ? 'もう少し聴いています…' : '待機中';
+    onsetCountEl.textContent = '';
+    beansEl.classList.remove('spinning');
+  });
+</script>
+</body>
+</html>
